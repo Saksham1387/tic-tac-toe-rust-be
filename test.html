@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tic-Tac-Toe Test Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 5px;
+            margin: 20px 0;
+        }
+        .cell {
+            width: 100px;
+            height: 100px;
+            border: 2px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            cursor: pointer;
+            background: #f0f0f0;
+        }
+        .cell:hover {
+            background: #e0e0e0;
+        }
+        .cell.disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        .log {
+            border: 1px solid #ccc;
+            padding: 10px;
+            height: 400px;
+            overflow-y: auto;
+            background: #f9f9f9;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            background: #e3f2fd;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        button.danger {
+            background: #dc3545;
+        }
+        button.danger:hover {
+            background: #c82333;
+        }
+        input {
+            padding: 8px;
+            margin: 5px;
+            width: 200px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .player-info {
+            background: #fff3cd;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .connection-box {
+            background: white;
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎮 Tic-Tac-Toe WebSocket Test Client</h1>
+    
+    <div class="connection-box">
+        <h3>Connection Setup</h3>
+        <input type="text" id="userId" placeholder="User ID (e.g., user1)" value="user1">
+        <input type="text" id="username" placeholder="Username (e.g., Alice)" value="Alice">
+        <input type="text" id="roomId" placeholder="Room ID (e.g., room123)" value="room123">
+        <br>
+        <button onclick="connect()" id="connectBtn">Connect to WebSocket</button>
+        <button onclick="disconnect()" id="disconnectBtn" disabled>Disconnect</button>
+        <button onclick="joinRoom()" id="joinBtn" disabled>Join Room</button>
+        <button onclick="leaveRoom()" id="leaveBtn" class="danger" disabled>Leave Room</button>
+    </div>
+
+    <div class="status" id="status">❌ Not connected</div>
+    <div class="player-info" id="playerInfo">⏳ Not in game</div>
+
+    <div class="container">
+        <div>
+            <h2>Game Board</h2>
+            <div class="board" id="board">
+                <!-- Grid cells will be added by JavaScript -->
+            </div>
+        </div>
+        
+        <div>
+            <h2>📋 Event Log</h2>
+            <div class="log" id="log"></div>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let mySymbol = null;
+        let currentTurn = 'X';
+        let gameStatus = 'waiting';
+        let inRoom = false;  // Track if player is in a room
+
+        // Initialize board
+        function initBoard() {
+            const board = document.getElementById('board');
+            board.innerHTML = '';
+            for (let row = 0; row < 3; row++) {
+                for (let col = 0; col < 3; col++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+                    cell.onclick = () => makeMove(row, col);
+                    board.appendChild(cell);
+                }
+            }
+        }
+
+        function connect() {
+            const userId = document.getElementById('userId').value;
+            const username = document.getElementById('username').value;
+
+            if (!userId || !username) {
+                alert('Please enter User ID and Username');
+                return;
+            }
+
+            log('🔄 Connecting to ws://localhost:8080/api/v1/ws...', 'blue');
+            ws = new WebSocket('ws://localhost:8080/api/v1/ws');
+
+            ws.onopen = () => {
+                log('✅ Connected to WebSocket!', 'green');
+                document.getElementById('status').textContent = '✅ Connected';
+                document.getElementById('status').style.background = '#d4edda';
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('disconnectBtn').disabled = false;
+                document.getElementById('joinBtn').disabled = false;
+            };
+
+            ws.onmessage = (event) => {
+                log('📨 RECEIVED: ' + event.data, 'blue');
+                try {
+                    const data = JSON.parse(event.data);
+                    handleServerEvent(data);
+                } catch (e) {
+                    log('❌ Failed to parse JSON: ' + e.message, 'red');
+                }
+            };
+
+            ws.onerror = (error) => {
+                log('❌ WebSocket Error: ' + error, 'red');
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onclose = (event) => {
+                log('🔌 Disconnected (code: ' + event.code + ')', 'orange');
+                document.getElementById('status').textContent = '❌ Disconnected';
+                document.getElementById('status').style.background = '#f8d7da';
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('disconnectBtn').disabled = true;
+                document.getElementById('joinBtn').disabled = true;
+                document.getElementById('leaveBtn').disabled = true;
+                inRoom = false;
+                ws = null;
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function joinRoom() {
+            if (!ws) {
+                alert('Connect first!');
+                return;
+            }
+
+            const roomId = document.getElementById('roomId').value;
+            const userId = document.getElementById('userId').value;
+            const username = document.getElementById('username').value;
+
+            if (!roomId) {
+                alert('Please enter Room ID');
+                return;
+            }
+
+            const message = {
+                type: 'join_room',
+                room_id: roomId,
+                user_id: userId,
+                username: username
+            };
+
+            const jsonStr = JSON.stringify(message);
+            log('📤 SENDING: ' + jsonStr, 'purple');
+            ws.send(jsonStr);
+        }
+
+        function leaveRoom() {
+            if (!ws) {
+                alert('Not connected!');
+                return;
+            }
+
+            if (!inRoom) {
+                alert('You are not in a room!');
+                return;
+            }
+
+            const roomId = document.getElementById('roomId').value;
+
+            const message = {
+                type: 'leave_room',
+                room_id: roomId
+            };
+
+            const jsonStr = JSON.stringify(message);
+            log('📤 SENDING LEAVE: ' + jsonStr, 'purple');
+            ws.send(jsonStr);
+
+            // Reset local state
+            inRoom = false;
+            mySymbol = null;
+            gameStatus = 'waiting';
+            document.getElementById('playerInfo').textContent = '⏳ Not in game';
+            document.getElementById('joinBtn').disabled = false;
+            document.getElementById('leaveBtn').disabled = true;
+            initBoard();  // Clear the board
+        }
+
+        function makeMove(row, col) {
+            if (!ws) {
+                log('⚠️ Not connected!', 'orange');
+                return;
+            }
+
+            if (gameStatus !== 'InProgress') {
+                log('⚠️ Cannot make move - game status: ' + gameStatus, 'orange');
+                return;
+            }
+
+            if (mySymbol !== currentTurn) {
+                log('⚠️ Not your turn! (You: ' + mySymbol + ', Current: ' + currentTurn + ')', 'orange');
+                return;
+            }
+
+            const roomId = document.getElementById('roomId').value;
+            const message = {
+                type: 'make_move',
+                room_id: roomId,
+                row: row,
+                col: col
+            };
+
+            const jsonStr = JSON.stringify(message);
+            log('📤 SENDING MOVE: ' + jsonStr, 'purple');
+            ws.send(jsonStr);
+        }
+
+        function handleServerEvent(event) {
+            log('🎯 Handling event type: ' + event.type, 'green');
+            
+            switch (event.type) {
+                case 'room_joined':
+                    mySymbol = event.your_symbol;
+                    gameStatus = event.game_state.status;
+                    inRoom = true;
+                    document.getElementById('playerInfo').textContent = 
+                        `✅ You are: ${mySymbol} | Status: ${gameStatus}`;
+                    document.getElementById('joinBtn').disabled = true;
+                    document.getElementById('leaveBtn').disabled = false;
+                    updateBoard(event.game_state.board, event.game_state.current_turn);
+                    log('✅ Successfully joined room as ' + mySymbol, 'green');
+                    break;
+
+                case 'player_joined':
+                    log(`🎮 Player ${event.username} joined as ${event.symbol}`, 'green');
+                    break;
+
+                case 'game_started':
+                    gameStatus = 'InProgress';
+                    currentTurn = event.game_state.current_turn;
+                    document.getElementById('playerInfo').textContent = 
+                        `✅ You are: ${mySymbol} | Status: PLAYING 🎮 | Turn: ${currentTurn}`;
+                    log('🎮 Game started! Current turn: ' + currentTurn, 'green');
+                    break;
+
+                case 'move_made':
+                    updateBoard(event.game_state.board, event.game_state.current_turn);
+                    currentTurn = event.game_state.current_turn;
+                    gameStatus = event.game_state.status;
+                    log(`📍 ${event.username} played ${event.symbol} at (${event.row}, ${event.col})`, 'blue');
+                    break;
+
+                case 'game_over':
+                    gameStatus = 'Completed';
+                    if (event.winner) {
+                        log(`🏆 ${event.winner} WINS!`, 'gold');
+                        alert(`🏆 Game Over! ${event.winner} wins!`);
+                    } else {
+                        log(`🤝 Game ended in a DRAW!`, 'gray');
+                        alert('🤝 Game Over! It\'s a draw!');
+                    }
+                    updateBoard(event.game_state.board, event.game_state.current_turn);
+                    break;
+
+                case 'player_left':
+                    log(`👋 ${event.username} left the room`, 'orange');
+                    alert(`${event.username} left the room. Game ended.`);
+                    // Reset game state
+                    gameStatus = 'waiting';
+                    initBoard();
+                    break;
+
+                case 'error':
+                    log(`❌ SERVER ERROR: ${event.message}`, 'red');
+                    alert('❌ Error: ' + event.message);
+                    break;
+
+                case 'chat_message':
+                    log(`💬 ${event.username}: ${event.message}`, 'green');
+                    break;
+
+                default:
+                    log('⚠️ Unknown event type: ' + event.type, 'orange');
+            }
+        }
+
+        function updateBoard(board, turn) {
+            currentTurn = turn;
+            const cells = document.querySelectorAll('.cell');
+            let index = 0;
+            
+            log('🎲 Updating board, current turn: ' + turn, 'gray');
+            
+            for (let row = 0; row < 3; row++) {
+                for (let col = 0; col < 3; col++) {
+                    const cell = cells[index];
+                    const value = board[row][col];
+                    
+                    if (value) {
+                        cell.textContent = value;
+                        cell.classList.add('disabled');
+                    } else {
+                        cell.textContent = '';
+                        cell.classList.remove('disabled');
+                    }
+                    
+                    index++;
+                }
+            }
+
+            document.getElementById('playerInfo').textContent = 
+                `✅ You are: ${mySymbol} | Status: ${gameStatus} | Turn: ${currentTurn}`;
+        }
+
+        function log(message, color = 'black') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.style.color = color;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            
+            // Also log to console
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        // Initialize board on load
+        initBoard();
+        log('🚀 Test client loaded. Enter details and click Connect.', 'blue');
+    </script>
+</body>
+</html>
