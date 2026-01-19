@@ -12,12 +12,13 @@ impl FromRequest for JwtClaims {
     type Future = Ready<Result<Self, Self::Error>>;
 
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
-                // 1️⃣ Authorization: Bearer <token>
-            let bearer_token: Option<&str> = req
+        
+        let bearer_token: Option<&str> = req
             .headers()
             .get("Authorization")
             .and_then(|h| h.to_str().ok());
-        // 2️⃣ ?token=<token>
+
+        
         let query_token: Option<&str> = req
             .query_string()
             .split('&')
@@ -29,7 +30,7 @@ impl FromRequest for JwtClaims {
                 }
             });
 
-        // 3️⃣ Pick whichever exists
+
         let token: &str = bearer_token
             .or(query_token)
             .ok_or_else(|| ErrorUnauthorized(
