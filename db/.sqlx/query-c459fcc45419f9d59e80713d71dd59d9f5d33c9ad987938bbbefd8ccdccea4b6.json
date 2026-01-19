@@ -1,0 +1,79 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    SELECT  \n\n                    id,\n                    room_name,\n                    max_spectators,\n                    max_players,\n                    is_private,\n                    room_code,\n                    status as \"status: RoomStatus\",\n                    created_by,\n                    created_at\n                    \n                    FROM rooms \n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "room_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "max_spectators",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "max_players",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "is_private",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "room_code",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "status: RoomStatus",
+        "type_info": {
+          "Custom": {
+            "name": "room_status",
+            "kind": {
+              "Enum": [
+                "waiting",
+                "in_progress",
+                "completed"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "created_by",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "c459fcc45419f9d59e80713d71dd59d9f5d33c9ad987938bbbefd8ccdccea4b6"
+}

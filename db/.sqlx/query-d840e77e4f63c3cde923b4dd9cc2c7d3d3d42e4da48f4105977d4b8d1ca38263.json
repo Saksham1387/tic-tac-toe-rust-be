@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT user_id,total_games,wins,losses,draws,current_streak,longest_streak,updated_at FROM user_stats WHERE user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "total_games",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "wins",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "losses",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "draws",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "current_streak",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "longest_streak",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "d840e77e4f63c3cde923b4dd9cc2c7d3d3d42e4da48f4105977d4b8d1ca38263"
+}

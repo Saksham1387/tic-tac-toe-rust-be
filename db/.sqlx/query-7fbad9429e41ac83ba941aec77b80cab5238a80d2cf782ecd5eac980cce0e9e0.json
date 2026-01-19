@@ -1,0 +1,75 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO room_participants (room_id, user_id, role, position)\n        VALUES ($1, $2, $3, $4)\n        RETURNING\n            id,\n            room_id,\n            user_id,\n            position,\n            role as \"role: RoomRole\",\n            joined_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "room_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "position",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "role: RoomRole",
+        "type_info": {
+          "Custom": {
+            "name": "room_role",
+            "kind": {
+              "Enum": [
+                "player",
+                "spectator"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "joined_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "room_role",
+            "kind": {
+              "Enum": [
+                "player",
+                "spectator"
+              ]
+            }
+          }
+        },
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "7fbad9429e41ac83ba941aec77b80cab5238a80d2cf782ecd5eac980cce0e9e0"
+}
