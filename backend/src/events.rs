@@ -33,6 +33,12 @@ pub enum ClientEvent {
 // ============================================
 
 #[derive(Debug, Serialize)]
+pub struct PlayerInfo {
+    pub username: String,
+    pub symbol: Symbol,
+}
+
+#[derive(Debug, Serialize)]
 #[serde(tag = "type")]
 pub enum ServerEvent {
     #[serde(rename = "room_joined")]
@@ -40,6 +46,7 @@ pub enum ServerEvent {
         room_id: String,
         your_symbol: Symbol,
         game_state: GameState,
+        players: Vec<PlayerInfo>,
     },
 
     #[serde(rename = "player_joined")]

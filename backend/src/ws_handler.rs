@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::game::{AppState, Player, Room};
-use crate::events::{ClientEvent, ServerEvent};
+use crate::events::{ClientEvent, PlayerInfo, ServerEvent};
 
 pub async fn ws_handler(
     req: HttpRequest,
@@ -109,16 +109,12 @@ pub async fn ws_handler(
 
         // Connection closed - cleanup
         if let (Some(room_id), Some(uid)) = (current_room_id, user_id) {
-            let _ = leave_room(rooms, room_id, uid).await;
+            let _ = update_player_connected(rooms, room_id, uid,false).await;
         }
     });
 
     Ok(res)
 }
-
-// ============================================
-// GAME LOGIC 
-// ============================================
 
 async fn join_room(
     rooms: Arc<RwLock<std::collections::HashMap<String, Room>>>,
@@ -146,6 +142,7 @@ async fn join_room(
             username: username.clone(),
             symbol: crate::game::Symbol::X, // Will be set by add_player
             session: session.clone(),
+            connected: true,
         };
 
         symbol = if room.players.is_empty() {
@@ -165,16 +162,27 @@ async fn join_room(
         // Lock is released here automatically when rooms_lock goes out of scope
     }
 
-    
+
     println!("🔓 Released write lock on rooms");
-    
+
+   
     // Scope 2: Send messages (no room lock held)
     {
+        let mut rooms_lock = rooms.write().await;
+        println!("🔒 Acquired write lock on rooms");
+        
+        let room = rooms_lock.get_mut(&room_id).ok_or("Room not found")?;
+
+        let players_info = room.players.iter().map(|p| PlayerInfo {
+            username: p.username.clone(),
+            symbol: p.symbol,
+        }).collect::<Vec<PlayerInfo>>();
         // Send confirmation to joining player
         let event = ServerEvent::RoomJoined {
             room_id: room_id.clone(),
             your_symbol: symbol,
             game_state: game_state.clone(),
+            players: players_info,
         };
         
         let mut s = session.write().await;
@@ -210,6 +218,20 @@ async fn join_room(
 }
 
 
+async fn update_player_connected(
+    rooms: Arc<RwLock<std::collections::HashMap<String, Room>>>,
+    room_id: String,
+    user_id: String,
+    connected: bool,
+) -> Result<(), String> {
+    let mut rooms_lock = rooms.write().await;
+    let room = rooms_lock.get_mut(&room_id).ok_or("Room not found")?;
+
+    let player = room.get_player_mut(&user_id).ok_or("Not in this room")?;
+    player.connected = connected;
+    Ok(())
+}
+   
 async fn make_move(
     rooms: Arc<RwLock<std::collections::HashMap<String, Room>>>,
     room_id: String,
@@ -292,13 +314,17 @@ async fn leave_room(
         let mut rooms_lock = rooms.write().await;
         let room = rooms_lock.get_mut(&room_id).ok_or("Room not found")?;
         
-        // Get username before removing
         username = room.get_player(&user_id)
             .map(|p| p.username.clone())
             .ok_or("Player not in room")?;
         
-        // Remove player
-        room.remove_player(user_id.clone());
+        _ = room.remove_player(user_id.clone());
+
+        if room.players.len() == 0 {
+            rooms_lock.remove(&room_id);
+            println!("🔓 Removed room {} from rooms", room_id);
+        }
+
         println!("✅ Removed player {} from room", username);
     }
     

@@ -38,6 +38,7 @@ pub struct Player {
     pub username: String,
     pub symbol: Symbol,
     pub session: Arc<RwLock<Session>>, // To send messages to this player
+    pub connected: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -166,8 +167,11 @@ impl Room {
     }
 
     pub fn add_player(&mut self, player: Player) -> Result<(), String> {
-        if self.players.len() >= 2 {
-            return Err("Room is full".to_string());
+        if self.players.iter().any(|p| p.user_id == player.user_id) {
+            let existing_player = self.get_player_mut(&player.user_id).ok_or("Player not found")?;
+            existing_player.connected = true;
+            existing_player.session = player.session;
+            return Ok(());
         }
 
         // Assign symbol based on position
@@ -197,6 +201,11 @@ impl Room {
  
         self.players.retain(|x| x.user_id != user_id);
 
+        if self.players.is_empty() {
+            self.game_state.status = GameStatus::Completed;
+            self.game_state.result = Some(GameResult::Draw);
+            return Ok(());
+        }
     
         Ok(())
     }
@@ -206,11 +215,18 @@ impl Room {
         self.players.iter().find(|p| p.user_id == user_id)
     }
 
+    pub fn get_player_mut(&mut self, user_id: &str) -> Option<&mut Player> {
+        self.players.iter_mut().find(|p| p.user_id == user_id)
+    }
+
     // Broadcast message to all players and spectators
     pub async fn broadcast(&self, message: &str) {
         for player in &self.players {
-            let mut session = player.session.write().await;
-            let _ = session.text(message).await;
+            if player.connected {
+                println!("🔊 Broadcasting message to player: {}", player.username);
+                let mut session = player.session.write().await;
+                    let _ = session.text(message).await;
+            }
         }
     }
 }
