@@ -1,14 +1,19 @@
 use serde::{Serialize,Deserialize};
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 use tokio::sync::RwLock;
-use actix_ws::Session;
 use std::collections::HashMap;
+use tokio::sync::mpsc::Sender;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Symbol {
     X,
     O,
 }
+
+pub struct User {
+    pub tx: Sender<String>,
+}
+
 
 pub struct Room {
     pub room_id: String,
@@ -37,7 +42,6 @@ pub struct Player {
     pub user_id: String,
     pub username: String,
     pub symbol: Symbol,
-    pub session: Arc<RwLock<Session>>, // To send messages to this player
     pub connected: bool,
 }
 
@@ -52,14 +56,43 @@ pub struct GameState {
 
 pub type Rooms = Arc<RwLock<HashMap<String, Room>>>;
 
+
+
+
+pub struct RoomManager {
+    pub clients: HashMap<String, User>,
+    pub subscriptions: HashMap<String, HashSet<String>>,
+    pub rooms: HashMap<String, Room>,
+}
+
+
+impl RoomManager {
+    pub fn new() -> Self {
+        Self {
+            clients: HashMap::new(),
+            subscriptions: HashMap::new(),
+            rooms: HashMap::new(),
+        }
+    }
+
+    pub async fn broadcast(&self,room_id:&str,message:String) {
+        if let Some(subscriptions) = self.subscriptions.get(room_id) {
+            for user_id in subscriptions {
+                if let Some(user) = self.clients.get(user_id) {
+                    let _ = user.tx.send(message.clone()).await;
+                }
+            }
+        }
+    }
+}
 pub struct AppState {
-    pub rooms: Rooms,
+    pub room_manager: Arc<RwLock<RoomManager>>,
 }
 
 impl AppState {
     pub fn new() -> Self {
         Self {
-            rooms: Arc::new(RwLock::new(HashMap::new())),
+            room_manager: Arc::new(RwLock::new(RoomManager::new())),
         }
     }
 }
@@ -101,7 +134,7 @@ impl GameState {
         // Check for winner
         if self.check_winner(symbol) {
             self.status = GameStatus::Completed;
-            self.result = Some(GameResult::Win((user_id)));
+            self.result = Some(GameResult::Win(user_id));
             return Ok(true); 
         }
 
@@ -170,7 +203,6 @@ impl Room {
         if self.players.iter().any(|p| p.user_id == player.user_id) {
             let existing_player = self.get_player_mut(&player.user_id).ok_or("Player not found")?;
             existing_player.connected = true;
-            existing_player.session = player.session;
             return Ok(());
         }
 
@@ -217,16 +249,5 @@ impl Room {
 
     pub fn get_player_mut(&mut self, user_id: &str) -> Option<&mut Player> {
         self.players.iter_mut().find(|p| p.user_id == user_id)
-    }
-
-    // Broadcast message to all players and spectators
-    pub async fn broadcast(&self, message: &str) {
-        for player in &self.players {
-            if player.connected {
-                println!("🔊 Broadcasting message to player: {}", player.username);
-                let mut session = player.session.write().await;
-                    let _ = session.text(message).await;
-            }
-        }
     }
 }

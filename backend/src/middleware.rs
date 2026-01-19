@@ -12,25 +12,41 @@ impl FromRequest for JwtClaims {
     type Future = Ready<Result<Self, Self::Error>>;
 
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
-        let auth_header = req.headers().get("Authorization");
-
-        if let Some(header_value) = auth_header {
-            if let Ok(token) = header_value.to_str() {
-                let secret = env::var("SECRET_KEY").expect("JWT_SECRET must be set");
-                let decoding_key = DecodingKey::from_secret(secret.as_bytes());
-                let validation = Validation::default();
-
-                match decode::<Claims>(token, &decoding_key, &validation) {
-                    Ok(token_data) => {
-                        return ready(Ok(JwtClaims(token_data.claims)));
-                    }
-                    Err(e) => {
-                        eprintln!("JWT decoding error: {:?}", e);
-                        return ready(Err(ErrorUnauthorized("Invalid JWT token")));
-                    }
+                // 1️⃣ Authorization: Bearer <token>
+            let bearer_token: Option<&str> = req
+            .headers()
+            .get("Authorization")
+            .and_then(|h| h.to_str().ok());
+        // 2️⃣ ?token=<token>
+        let query_token: Option<&str> = req
+            .query_string()
+            .split('&')
+            .find_map(|pair| {
+                let mut iter = pair.splitn(2, '=');
+                match (iter.next(), iter.next()) {
+                    (Some("token"), Some(value)) => Some(value),
+                    _ => None,
                 }
+            });
+
+        // 3️⃣ Pick whichever exists
+        let token: &str = bearer_token
+            .or(query_token)
+            .ok_or_else(|| ErrorUnauthorized(
+                "JWT token missing in Authorization header or query",
+            )).unwrap();
+
+        // 4️⃣ Decode JWT
+        let secret = env::var("SECRET_KEY").expect("SECRET_KEY must be set");
+        let decoding_key = DecodingKey::from_secret(secret.as_bytes());
+        let validation = Validation::default();
+
+        match decode::<Claims>(token, &decoding_key, &validation) {
+            Ok(token_data) => ready(Ok(JwtClaims(token_data.claims))),
+            Err(e) => {
+                eprintln!("JWT decoding error: {:?}", e);
+                ready(Err(ErrorUnauthorized("Invalid JWT token")))
             }
         }
-        ready(Err(ErrorUnauthorized("Authorization header missing or invalid")))
     }
 }
