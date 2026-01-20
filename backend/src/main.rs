@@ -1,4 +1,3 @@
-
 use anyhow::Result;
 use actix_web::{web, HttpServer};
 use actix_cors::Cors;
@@ -17,8 +16,8 @@ use routes::user::{create_user,sign_in,get_user};
 use crate::game::AppState;
 use crate::routes::room::{create_room, get_rooms};
 
-async fn health_check() -> Result<web::Json<String>> {
-    Ok(web::Json("OK".to_string()))
+async fn health_check() -> web::Json<String> {
+    web::Json("OK".to_string())
 }
 
 #[actix_web::main]
