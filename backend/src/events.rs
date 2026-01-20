@@ -25,6 +25,12 @@ pub enum ClientEvent {
     #[serde(rename = "leave_room")]
     LeaveRoom {
         room_id: String
+    },
+
+    #[serde(rename = "find_match")]
+    FindMatch {
+        user_id:String,
+        username:String
     }
 }
 
@@ -32,7 +38,7 @@ pub enum ClientEvent {
 // SERVER → CLIENT EVENTS
 // ============================================
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct PlayerInfo {
     pub username: String,
     pub symbol: Symbol,
@@ -47,6 +53,16 @@ pub enum ServerEvent {
         your_symbol: Symbol,
         game_state: GameState,
         players: Vec<PlayerInfo>,
+    },
+
+    #[serde(rename = "waiting_in_queue")]
+    WaitingInQueue {
+        user_id: String
+    },
+
+    #[serde(rename = "match_found")]
+    MatchFound {
+        username: String
     },
 
     #[serde(rename = "player_joined")]

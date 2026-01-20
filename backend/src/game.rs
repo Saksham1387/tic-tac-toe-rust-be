@@ -58,11 +58,16 @@ pub type Rooms = Arc<RwLock<HashMap<String, Room>>>;
 
 
 
+pub struct WaitingPlayer {
+    pub user_id:String,
+    pub username:String
+}
 
 pub struct RoomManager {
     pub clients: HashMap<String, User>,
     pub subscriptions: HashMap<String, HashSet<String>>,
     pub rooms: HashMap<String, Room>,
+    pub waiting_queue: Vec<WaitingPlayer>
 }
 
 
@@ -72,6 +77,7 @@ impl RoomManager {
             clients: HashMap::new(),
             subscriptions: HashMap::new(),
             rooms: HashMap::new(),
+            waiting_queue: Vec::new()
         }
     }
 
@@ -84,6 +90,18 @@ impl RoomManager {
             }
         }
     }
+
+    pub async fn broadcast_to_user(&self,message:String,user_id:String) {
+        if let Some(user) = self.clients.get(&user_id) {
+            let _ = user.tx.send(message.clone()).await;
+        }
+    }
+
+    // pub async fn find_match(&self,user_id:String,username:String){
+    //     if(self.waiting_queue.len() == 0){
+    //         self.waiting_queue.a;
+    //     }
+    // }
 }
 pub struct AppState {
     pub room_manager: Arc<RwLock<RoomManager>>,

@@ -1,11 +1,13 @@
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_ws::AggregatedMessage;
+use db::Store;
+use db::models::room::CreateRoomRequest;
 use futures_util::StreamExt;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
 
-use crate::game::{AppState, Player, Symbol, User};
+use crate::game::{AppState, GameStatus, Player, Symbol, User, WaitingPlayer};
 use crate::events::{ClientEvent, PlayerInfo, ServerEvent};
 use crate::game::RoomManager;
 use crate::middleware::JwtClaims;
@@ -57,6 +59,30 @@ pub async fn ws_handler(
                     let event: Result<ClientEvent, _> = serde_json::from_str(&text);
 
                     match event {
+                        Ok(ClientEvent::FindMatch { user_id:uid, username }) => {
+                            user_id = Some(uid.clone());
+                            
+                            let result = find_match(
+                                room_manager.clone(),
+                                uid.clone(),
+                                username
+                            ).await ;
+                            
+                            match result {
+                                Ok(response_msg) => {
+                                    println!("✅ User put into queue");
+               
+                                    // Send response through channel
+                                    if let Some(user) = room_manager.read().await.clients.get(&uid) {
+                                        let _ = user.tx.send(response_msg).await;
+                                    }
+                                }
+                                Err(e) => {
+                                    println!("❌ Finding match failed: {}", e);
+                                    send_error_channel(&room_manager, &uid, &e).await;
+                                }
+                            }
+                        }
                         Ok(ClientEvent::JoinRoom { room_id, user_id: uid, username }) => {
                             println!("🎮 Join room: {}, user: {}", room_id, uid);
                             
@@ -164,6 +190,118 @@ pub async fn ws_handler(
     });
 
     Ok(res)
+}
+
+async fn find_match(
+    room_manager: Arc<RwLock<RoomManager>>,
+    user_id:String,
+    username:String
+) -> Result<String, String> {   
+    let players_info:Vec<PlayerInfo>;
+    let should_start_game;
+    let room_id;
+    let game_state; 
+    let event_to_send;
+
+
+    {
+        let mut rm = room_manager.write().await;
+        if rm.waiting_queue.len() <= 0 {
+            rm.waiting_queue.push(WaitingPlayer {
+                user_id:user_id.clone(),
+                username
+            });
+
+            let event  = ServerEvent::WaitingInQueue { user_id };
+
+            return Ok(event.to_json());
+        };  
+
+        let waiting_player1 = rm.waiting_queue.pop().unwrap();
+
+        let store = Store::new().await.unwrap();
+
+        let create_room_result = store.create_room(CreateRoomRequest {
+            room_name:String::from("fdgjodf"),
+            is_private:true,
+            max_spectators:10
+        }).await.unwrap();
+        room_id = create_room_result.room_id.to_string();
+        rm.rooms.insert(create_room_result.room_id.to_string(), crate::game::Room::new(create_room_result.room_id.to_string(), "some".to_string()));
+
+        rm.subscriptions.entry(create_room_result.room_id.to_string()).or_insert_with(HashSet::new).insert(user_id.clone());
+        rm.subscriptions.entry(create_room_result.room_id.to_string()).or_insert_with(HashSet::new).insert(waiting_player1.user_id.clone());
+
+        let room = rm.rooms.get_mut(&create_room_result.room_id.to_string()).ok_or("Room not found")?;
+        room.game_state.status = GameStatus::InProgress;
+        game_state = room.game_state.clone();
+        let player1 = Player {
+            user_id:user_id.clone(),
+            username,
+            symbol: Symbol::X,
+            connected:true
+        };
+        let player2 = Player {
+            user_id:waiting_player1.user_id.clone(),
+            username:waiting_player1.username.clone(),
+            symbol: Symbol::O,
+            connected:true
+        };
+
+        room.add_player(player1);
+        room.add_player(player2);
+
+        players_info = room.players.iter().map(|p| PlayerInfo {
+            username: p.username.clone(),
+            symbol: p.symbol,
+        }).collect();
+
+        should_start_game = true;
+
+
+        let event_player_1 = ServerEvent::RoomJoined {
+            room_id: room_id.clone(),
+            your_symbol: Symbol::X,
+            game_state: game_state.clone(),
+            players:players_info.clone()
+        };
+    
+        let event_player_2 = ServerEvent::RoomJoined {
+            room_id: room_id.clone(),
+            your_symbol: Symbol::O,
+            game_state: game_state.clone(),
+            players:players_info
+        };
+        
+
+        rm.broadcast_to_user(event_player_1.to_json(), user_id.clone()).await;
+        rm.broadcast_to_user(event_player_2.to_json(), waiting_player1.user_id.clone()).await;
+
+       
+        event_to_send = ServerEvent::MatchFound {
+            username: waiting_player1.username.clone()
+        };
+    }
+  
+
+    {
+        let rm = room_manager.read().await;
+        // let broadcast_event = ServerEvent::PlayerJoined {
+        //     username: username.clone(),
+        //     symbol,
+        // };
+        // rm.broadcast(&room_id, broadcast_event.to_json()).await;
+        
+        if should_start_game {
+            let start_event = ServerEvent::GameStarted { game_state };
+            rm.broadcast(&room_id, start_event.to_json()).await;
+        }
+    }
+
+
+
+
+    return Ok(event_to_send.to_json())
 }
 
 async fn join_room(
