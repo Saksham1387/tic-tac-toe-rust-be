@@ -48,7 +48,7 @@ async fn main() -> Result<()> {
             .app_data(app_state.clone())
 
     })
-    .bind("0.0.0.0:8080")?
+    .bind("0.0.0.0:3001")?
     .run()
     .await?;
 
