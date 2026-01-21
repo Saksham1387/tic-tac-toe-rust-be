@@ -121,7 +121,6 @@ impl Store {
             .fetch_one(&self.pool)
             .await?;
 
-        print!("{:?}",room);
         Ok(CreateRoomResponse {
             room_id:room.id,
             room_code:room.room_code

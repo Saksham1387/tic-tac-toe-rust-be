@@ -53,6 +53,24 @@ pub struct UserStats {
 }
 
 #[derive(Serialize, Deserialize)]
+pub enum UpdateUserStatsType {
+    Win,
+    Loss,
+    Draw
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct UpdateUserStatsRequest {
+    pub user_id: Uuid,
+    pub update_type: UpdateUserStatsType,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct UpdateUserStatsResponse {
+    pub user_stat: UserStats,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct GetUserStatsRequest {
     pub user_id:Uuid
 }
@@ -89,11 +107,45 @@ impl Store {
         })
     }
 
+    pub async fn update_user_stats(&self, request:UpdateUserStatsRequest) -> Result<UpdateUserStatsResponse> {
+        let user_stat;
+        match request.update_type {
+            UpdateUserStatsType::Win => {
+                user_stat = sqlx::query_as!(UserStats,"UPDATE user_stats SET total_games = total_games + 1, wins = wins + 1 WHERE user_id = $1 RETURNING user_id,total_games,wins,losses,draws,current_streak,longest_streak,updated_at",request.user_id)
+                .fetch_one(&self.pool)
+                .await?;
+            }
+            UpdateUserStatsType::Loss => {
+                user_stat = sqlx::query_as!(UserStats,"UPDATE user_stats SET total_games = total_games + 1, losses = losses + 1 WHERE user_id = $1 RETURNING user_id,total_games,wins,losses,draws,current_streak,longest_streak,updated_at",request.user_id)
+                .fetch_one(&self.pool)
+                .await?;
+            }
+            UpdateUserStatsType::Draw => {
+                user_stat = sqlx::query_as!(UserStats,"UPDATE user_stats SET total_games = total_games + 1, draws = draws + 1 WHERE user_id = $1 RETURNING user_id,total_games,wins,losses,draws,current_streak,longest_streak,updated_at",request.user_id)
+                .fetch_one(&self.pool)
+                .await?;
+            }
+        }
+
+        Ok(UpdateUserStatsResponse {
+            user_stat: user_stat,
+        })
+        
+    }
+
+    
     pub async fn get_user_stats(&self, request:GetUserStatsRequest ) -> Result<UserStats> {
         let user_stat = sqlx::query_as!(UserStats,"SELECT user_id,total_games,wins,losses,draws,current_streak,longest_streak,updated_at FROM user_stats WHERE user_id = $1",request.user_id)
-            .fetch_one(&self.pool)
+            .fetch_optional(&self.pool)
             .await?;
 
-        Ok(user_stat)
+        if let Some(stats) = user_stat {
+            Ok(stats)
+        } else {
+            let initial_stats = sqlx::query_as!(UserStats,"INSERT INTO user_stats (user_id, total_games, wins, losses, draws, current_streak, longest_streak) VALUES ($1, 0, 0, 0, 0, 0, 0) RETURNING user_id,total_games,wins,losses,draws,current_streak,longest_streak,updated_at",request.user_id)
+                .fetch_one(&self.pool)
+                .await?;
+            Ok(initial_stats)
+        }
     }
 }

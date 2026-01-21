@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE user_stats SET total_games = total_games + 1, losses = losses + 1 WHERE user_id = $1 RETURNING user_id,total_games,wins,losses,draws,current_streak,longest_streak,updated_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "total_games",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "wins",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "losses",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "draws",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "current_streak",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "longest_streak",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "e32bd83a3fb4d25072b4dc2096fd601431bae9af8d7eb30bcc52babdb5c9a3f5"
+}
