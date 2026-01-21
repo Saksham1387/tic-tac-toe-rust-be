@@ -45,7 +45,6 @@ impl FromRequest for JwtClaims {
         match decode::<Claims>(token, &decoding_key, &validation) {
             Ok(token_data) => ready(Ok(JwtClaims(token_data.claims))),
             Err(e) => {
-                eprintln!("JWT decoding error: {:?}", e);
                 ready(Err(ErrorUnauthorized("Invalid JWT token")))
             }
         }

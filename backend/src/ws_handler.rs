@@ -18,12 +18,8 @@ pub async fn ws_handler(
     app_state: web::Data<AppState>,
     claims: JwtClaims
 ) -> Result<HttpResponse, Error> {
-    println!("🔌 New WebSocket connection");
-    
     let (res, session, stream) = actix_ws::handle(&req, stream)?;
     
-
-    println!("✅ WebSocket handshake successful!");
 
     // Create channel for this user
     let (tx, mut rx) = mpsc::channel::<String>(32);
@@ -49,12 +45,12 @@ pub async fn ws_handler(
         let mut current_room_id: Option<String> = None;
         let mut user_id: Option<String> = None;
 
-        println!("🎯 Receiver task started");
+        
 
         while let Some(msg) = stream.next().await {
             match msg {
                 Ok(AggregatedMessage::Text(text)) => {
-                    println!("📨 Received text: {}", text);
+                    
                     
                     let event: Result<ClientEvent, _> = serde_json::from_str(&text);
 
@@ -70,7 +66,7 @@ pub async fn ws_handler(
                             
                             match result {
                                 Ok(response_msg) => {
-                                    println!("✅ User put into queue");
+                                    
                
                                     // Send response through channel
                                     if let Some(user) = room_manager.read().await.clients.get(&uid) {
@@ -78,13 +74,13 @@ pub async fn ws_handler(
                                     }
                                 }
                                 Err(e) => {
-                                    println!("❌ Finding match failed: {}", e);
+                                    
                                     send_error_channel(&room_manager, &uid, &e).await;
                                 }
                             }
                         }
                         Ok(ClientEvent::JoinRoom { room_id, user_id: uid, username }) => {
-                            println!("🎮 Join room: {}, user: {}", room_id, uid);
+                            
                             
                             user_id = Some(uid.clone());
                             
@@ -97,7 +93,6 @@ pub async fn ws_handler(
 
                             match result {
                                 Ok(response_msg) => {
-                                    println!("✅ Joined room");
                                     current_room_id = Some(room_id);
                                     
                                     // Send response through channel
@@ -106,7 +101,6 @@ pub async fn ws_handler(
                                     }
                                 }
                                 Err(e) => {
-                                    println!("❌ Join failed: {}", e);
                                     send_error_channel(&room_manager, &uid, &e).await;
                                 }
                             }
@@ -136,7 +130,6 @@ pub async fn ws_handler(
                         }
 
                         Err(e) => {
-                            println!("❌ Parse error: {}", e);
                             if let Some(uid) = &user_id {
                                 send_error_channel(&room_manager, uid, &format!("Invalid message: {}", e)).await;
                             }
@@ -145,17 +138,14 @@ pub async fn ws_handler(
                 }
 
                 Ok(AggregatedMessage::Ping(msg)) => {
-                    println!("🏓 PING");
                     let _ = session_clone.pong(&msg).await;
                 }
 
                 Ok(AggregatedMessage::Close(reason)) => {
-                    println!("🔌 Client closed: {:?}", reason);
                     break;
                 }
 
                 Err(e) => {
-                    println!("❌ Stream error: {}", e);
                     break;
                 }
 
@@ -163,8 +153,6 @@ pub async fn ws_handler(
             }
         }
 
-        println!("🔌 Receiver task ending");
-        
         // Cleanup
         if let (Some(room_id), Some(uid)) = (current_room_id, user_id.clone()) {
             let _ = update_player_connected(room_manager.clone(), room_id, uid.clone()).await;
@@ -175,18 +163,13 @@ pub async fn ws_handler(
     });
 
     // TASK 2: Sender - Read from channel, write to WebSocket
-    actix_web::rt::spawn(async move {
-        println!("📤 Sender task started");
-        
+    actix_web::rt::spawn(async move {        
         while let Some(message) = rx.recv().await {
-            println!("📤 Sending: {}", message);
             if let Err(e) = session_sender.text(message).await {
-                println!("❌ Send failed: {}", e);
                 break;
             }
         }
         
-        println!("📤 Sender task ending");
     });
 
     Ok(res)
@@ -310,8 +293,6 @@ async fn join_room(
     user_id: String,
     username: String,
 ) -> Result<String, String> {
-    println!("🎮 join_room called: room={}, user={}", room_id, user_id);
-    
     let symbol;
     let should_start_game;
     let game_state; 
@@ -393,8 +374,6 @@ async fn make_move(
     row: usize,
     col: usize,
 ) -> Result<String, String> {
-    println!("🎯 make_move: room={}, user={}, pos=({},{})", room_id, user_id, row, col);
-    
     let username;
     let symbol;
     let game_ended;
@@ -409,7 +388,7 @@ async fn make_move(
         symbol = player.symbol;
         username = player.username.clone();
 
-        game_ended = room.game_state.make_move(row, col, symbol,user_id)?;
+        game_ended = room.game_state.make_move(row, col, symbol,user_id,&room.players).await?;
         game_state = room.game_state.clone();
         
         winner_username = if game_ended {
@@ -430,7 +409,6 @@ async fn make_move(
         let rm = room_manager.read().await;
 
         rm.broadcast(&room_id,event.to_json()).await;
-        println!("📢 Broadcasted MoveMade event");
 
         if game_ended {
             let game_over_event = ServerEvent::GameOver {
@@ -438,7 +416,6 @@ async fn make_move(
                 game_state,
             };
             rm.broadcast(&room_id,game_over_event.to_json()).await;
-            println!("📢 Broadcasted GameOver event");
         }
     }
 
@@ -464,10 +441,8 @@ async fn leave_room(
 
         if room.players.len() == 0 {
             rm.rooms.remove(&room_id);
-            println!("🔓 Removed room {} from rooms", room_id);
         }
 
-        println!("✅ Removed player {} from room", username);
     }
     
     // Scope 2: Broadcast to remaining players
@@ -478,7 +453,6 @@ async fn leave_room(
                 username: username.clone()  // Use username, not user_id!
             };
             rm.broadcast(&room_id,broadcast_event.to_json()).await;
-            println!("📢 Broadcasted PlayerLeft event");
         }
     }
     Ok(())

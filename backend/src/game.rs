@@ -1,4 +1,6 @@
+use db::{Store, models::user::{GetUserStatsRequest, UpdateUserStatsRequest, UpdateUserStatsType}};
 use serde::{Serialize,Deserialize};
+use uuid::Uuid;
 use std::{collections::HashSet, sync::Arc};
 use tokio::sync::RwLock;
 use std::collections::HashMap;
@@ -127,8 +129,9 @@ impl GameState {
         }
     }
 
-    pub fn make_move(&mut self, row: usize, col: usize, symbol: Symbol,user_id:String) -> Result<bool, String> {
-        // Validate move
+    pub async fn make_move(&mut self, row: usize, col: usize, symbol: Symbol,user_id:String,players: &[Player]) -> Result<bool, String> {
+
+        let store = Store::new().await.map_err(|e| e.to_string())?;
         if self.status != GameStatus::InProgress {
             return Err("Game not in progress".to_string());
         }
@@ -152,6 +155,20 @@ impl GameState {
         // Check for winner
         if self.check_winner(symbol) {
             self.status = GameStatus::Completed;
+            
+            store.update_user_stats(UpdateUserStatsRequest{
+                user_id:Uuid::parse_str(&user_id).map_err(|e| e.to_string())?,
+                update_type:UpdateUserStatsType::Win
+            }).await;
+
+            if let Some(loser) = players.iter().find(|p| p.user_id != user_id) {
+                let loser_uuid = Uuid::parse_str(&loser.user_id).map_err(|e| e.to_string())?;
+                store.update_user_stats(UpdateUserStatsRequest{
+                    user_id: loser_uuid,
+                    update_type: UpdateUserStatsType::Loss
+                }).await;
+            }
+
             self.result = Some(GameResult::Win(user_id));
             return Ok(true); 
         }
@@ -160,6 +177,14 @@ impl GameState {
         if self.move_count == 9 {
             self.status = GameStatus::Completed;
             self.result = Some(GameResult::Draw);
+
+            for player in players.iter() {
+                let user_uuid = Uuid::parse_str(&player.user_id).map_err(|e| e.to_string())?;
+                store.update_user_stats(UpdateUserStatsRequest{
+                    user_id: user_uuid,
+                    update_type: UpdateUserStatsType::Draw
+                }).await;
+            }
             return Ok(true); 
         }
 

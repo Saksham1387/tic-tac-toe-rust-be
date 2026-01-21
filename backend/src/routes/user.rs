@@ -2,9 +2,10 @@ use std::env;
 
 use actix_web::{web, Result};
 use db::Store;
-use db::models::user::{CreateUserRequest, CreateUserResponse, GetUserRequest, UserSigninRequest};
+use db::models::user::{CreateUserRequest, CreateUserResponse, GetUserRequest, GetUserStatsRequest, UserSigninRequest, UserStats};
 use serde::{Deserialize, Serialize};
 use jsonwebtoken::{EncodingKey, Header,encode};
+use uuid::Uuid;
 
 use crate::middleware::JwtClaims;
 
@@ -30,6 +31,18 @@ pub struct SignInResponse {
 pub struct GetUserResponse {
     pub username: String,
     pub email:String
+}
+
+
+#[derive(Serialize, Deserialize)]
+pub struct GetUserStatsResponse {
+    stats: UserStats
+}
+
+pub async fn get_user_stats(data: web::Data<Store>, claims: JwtClaims) -> Result<web::Json<GetUserStatsResponse>> {
+    let store = data.into_inner();
+    let user_stats = store.get_user_stats(GetUserStatsRequest { user_id: Uuid::parse_str(&claims.0.sub).unwrap() }).await.map_err(|e| actix_web::error::ErrorInternalServerError(e.to_string()))?;
+    Ok(web::Json(GetUserStatsResponse { stats:user_stats }))
 }
 
 pub async fn get_user(data: web::Data<Store>, claims: JwtClaims) -> Result<web::Json<GetUserResponse>> {

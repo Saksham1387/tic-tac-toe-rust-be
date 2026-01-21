@@ -15,6 +15,7 @@ use routes::user::{create_user,sign_in,get_user};
 
 use crate::game::AppState;
 use crate::routes::room::{create_room, get_rooms};
+use crate::routes::user::get_user_stats;
 
 async fn health_check() -> web::Json<String> {
     web::Json("OK".to_string())
@@ -29,6 +30,7 @@ async fn main() -> Result<()> {
 
         let cors = Cors::default()
             .allowed_origin("https://tic-tac-toe-rust-fe.vercel.app")
+            .allowed_origin("http://localhost:3000")
             .allowed_methods(vec!["GET", "POST"])
             .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
             .allowed_header(http::header::CONTENT_TYPE)
@@ -41,6 +43,7 @@ async fn main() -> Result<()> {
             .service(web::resource("/signup").route(web::post().to(create_user)))
             .service(web::resource("/signin").route(web::post().to(sign_in)))
             .service(web::resource("/me").route(web::get().to(get_user)))
+            .service(web::resource("/me/stats").route(web::get().to(get_user_stats)))
             .service(web::resource("/create_room").route(web::post().to(create_room)))
             .service(web::resource("/ws").route(web::get().to(ws_handler::ws_handler)))
             .service(web::resource("/rooms").route(web::get().to(get_rooms)))
